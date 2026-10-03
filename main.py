@@ -2,14 +2,16 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
-@app.get('/')
-def home():
-    return {"Hello world!!"}
 
-@app.get('/user')
-def user():
-    return {"i am a user"}
+# path parameter  
+@app.get("/user/{user_id}")
+def user(user_id):
+    return {f"user {user_id}"}
 
-@app.get('/about')
-def about():
-    return {"i am about"}
+# path parameter with int type validation
+@app.get("/product/{user_id}")
+def user(user_id:int):
+    return {f"user {user_id}"}
+
+
+
