@@ -3,14 +3,20 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-#A decorator is a function that modifies or extends the behavior of another function without changing its original code.
-#Pydantic is a Python library used for data validation and parsing using Python type hints.
+
+class Features(BaseModel):
+    featureType: str
+    featureTag:str
 
 class Product(BaseModel):
-    name:str
-    price:int
+    name: str
+    price: int
+    features:Features
+
 
 @app.post("/product")
-def product(product:Product):
-    return {"Message":f"product created name : {product.name} with Price : {product.price} "}
+def create_product(product:Product):
+    return {"message" : "product created !!" ,"product":product}
+    
+
 
