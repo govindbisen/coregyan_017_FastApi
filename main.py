@@ -1,7 +1,12 @@
-# TOPIC RESPONSE MODEL 
+# TOPIC STATUS CODE 
 
-from typing import Optional
-from fastapi import FastAPI
+#from fastapi import FastAPI,status
+# status_code= status.HTTP_206_PARTIAL_CONTENT
+
+
+
+
+from fastapi import FastAPI,status
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -18,7 +23,7 @@ class ProductResponse(BaseModel):
     category: str
 
 # I will ont allow costprice to be displayed,  id will also not be displayed to user 
-@app.get("/product",response_model = ProductResponse)
+@app.get("/product",response_model = ProductResponse,status_code= status.HTTP_206_PARTIAL_CONTENT)
 def get_product():
     return {
         "id": 101,
