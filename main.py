@@ -1,22 +1,31 @@
+# TOPIC RESPONSE MODEL 
+
 from typing import Optional
 from fastapi import FastAPI
+from pydantic import BaseModel
 
 app = FastAPI()
+class Product(BaseModel):
+    id: int
+    name: str
+    price: float
+    cost_price: float 
+    category: str
 
-# 1. "user_id" is declared in the path, so it's a Path Parameter
-# 2. "role" and "limit" are not in the path, so they are Query Parameters
-@app.get("/users/{user_id}/items")
-async def get_user_items(
-    user_id: int,                   # Path param (Required)
-    role: Optional[str] = None,     # Query param (Optional, defaults to None)
-    limit: int = 10                 # Query param (Optional, defaults to 10)
-):
+class ProductResponse(BaseModel):
+    name: str
+    price: float
+    category: str
+
+# I will ont allow costprice to be displayed,  id will also not be displayed to user 
+@app.get("/product",response_model = ProductResponse)
+def get_product():
     return {
-        "user_id": user_id,
-        "applied_filter_role": role,
-        "limit_results": limit,
-        "message": f"Fetching {limit} items for user {user_id} filtered by {role}"
+        "id": 101,
+        "name": "Wireless Mouse",
+        "price": 499.00,
+        "cost_price": 250.00,  
+        "category": "Electronics"
     }
 
-
-# http://127.0.0.1:8000/users/0010123/items?limit=40&role="admin" 
+# http://127.0.0.1:8000/product
