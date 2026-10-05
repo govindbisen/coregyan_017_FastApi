@@ -17,3 +17,6 @@ async def get_user_items(
         "limit_results": limit,
         "message": f"Fetching {limit} items for user {user_id} filtered by {role}"
     }
+
+
+# http://127.0.0.1:8000/users/0010123/items?limit=40&role="admin" 
