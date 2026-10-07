@@ -6,14 +6,14 @@ app = FastAPI()
 items = {"1": "Laptop", "2": "Smartphone"}
 
 
-# dependency injection 
+# dependency injection EG 1 
 
 def commonLogig():
     return "this is dependency injection of common logic"
 
 
 
-#1 Depends
+#1 Depends 
 @app.get("/item/{item_id}")
 def read_item(item_id: str, data = Depends(commonLogig)):
    
