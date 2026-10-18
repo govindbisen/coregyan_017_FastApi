@@ -13,11 +13,7 @@ engine = create_engine(
     connect_args={"check_same_thread": False}
 )
 
-SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    expire_on_commit=False
-)
+SessionLocal = sessionmaker(bind=engine)
 
 
 def get_db():
@@ -37,7 +33,7 @@ class Base(DeclarativeBase):
 class Product(Base):
     __tablename__ = "products"
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), index=True)
     price: Mapped[float] = mapped_column(Float)
     quantity: Mapped[int] = mapped_column(default=0)
@@ -80,9 +76,12 @@ class ProductResponse(BaseModel):
 
 app = FastAPI()
 
+
 @app.get("/")
-def home(db:Session = Depends(get_db)):
-    return {"msg":"Running fine!!"}
+def home(db: Session = Depends(get_db)):
+    return {"msg": "Running fine!!"}
+
+
 # ---------------- CREATE ----------------
 
 @app.post(
@@ -94,7 +93,11 @@ def create_product(
     product_data: ProductCreate,
     db: Session = Depends(get_db)
 ):
-    product = Product(**product_data.model_dump())
+    product = Product(
+        name=product_data.name,
+        price=product_data.price,
+        quantity=product_data.quantity
+    )
 
     db.add(product)
     db.commit()
@@ -116,7 +119,10 @@ def get_products(db: Session = Depends(get_db)):
 # ---------------- READ ONE ----------------
 
 @app.get("/products/{product_id}", response_model=ProductResponse)
-def get_product(product_id: int, db: Session = Depends(get_db)):
+def get_product(
+    product_id: int,
+    db: Session = Depends(get_db)
+):
     statement = select(Product).where(Product.id == product_id)
     product = db.scalars(statement).one_or_none()
 
@@ -171,10 +177,14 @@ def patch_product(
             detail="Product not found"
         )
 
-    update_data = product_data.model_dump(exclude_unset=True)
+    if product_data.name is not None:
+        product.name = product_data.name
 
-    for field, value in update_data.items():
-        setattr(product, field, value)
+    if product_data.price is not None:
+        product.price = product_data.price
+
+    if product_data.quantity is not None:
+        product.quantity = product_data.quantity
 
     db.commit()
     db.refresh(product)
@@ -185,7 +195,10 @@ def patch_product(
 # ---------------- DELETE ----------------
 
 @app.delete("/products/{product_id}")
-def delete_product(product_id: int, db: Session = Depends(get_db)):
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db)
+):
     product = db.get(Product, product_id)
 
     if product is None:
