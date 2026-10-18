@@ -1,131 +1,200 @@
-from fastapi import FastAPI,Body
-import sqlite3
+
+from fastapi import FastAPI, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import create_engine, String, Float, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, sessionmaker
+
+# ---------------- DATABASE SETUP ----------------
+
+DATABASE_URL = "sqlite:///./products.db"
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+)
+
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    expire_on_commit=False
+)
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# ---------------- SQLALCHEMY MODEL ----------------
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), index=True)
+    price: Mapped[float] = mapped_column(Float)
+    quantity: Mapped[int] = mapped_column(default=0)
+
+
+# Create table if it does not exist
+Base.metadata.create_all(bind=engine)
+
+
+# ---------------- PYDANTIC SCHEMAS ----------------
+
+class ProductCreate(BaseModel):
+    name: str
+    price: float
+    quantity: int = 0
+
+
+class ProductUpdate(BaseModel):
+    name: str
+    price: float
+    quantity: int
+
+
+class ProductPatch(BaseModel):
+    name: str | None = None
+    price: float | None = None
+    quantity: int | None = None
+
+
+class ProductResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    price: float
+    quantity: int
+
+
+# ---------------- FASTAPI APP ----------------
 
 app = FastAPI()
 
-
-conn = sqlite3.connect("test.db", check_same_thread=False)
-cursor = conn.cursor()
-
-
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS blog (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        title TEXT NOT NULL, 
-        completed BOOLEAN DEFAULT 0
-    )
-""")
-conn.commit()
-
 @app.get("/")
-def home():
-    return {"message": "Database and Table created successfully!"}
+def home(db:Session = Depends(get_db)):
+    return {"msg":"Running fine!!"}
+# ---------------- CREATE ----------------
 
-@app.post("/create-blog")
-def create_blog(title: str = Body(...),  #Ellipsis ... it state that it is required 
-    completed: bool = Body(False),
-    creator: str = Body(...)
-    ):
-    cursor.execute("INSERT INTO blog  (title,completed) VALUES(? ,?) ", (title, int(completed)) )
-    conn.commit()
-    new_id = cursor.lastrowid
-    return {
-        "id": new_id,
-        "title": title,
-        "crated By" :creator,
-        "completed": completed,
-        "message": "Blog created successfully without Pydantic!"
-    }
-
-
-# PATH PARAMS
-@app.delete("/delete-blog/{id}")
-def create_blog(id:int):
-    cursor.execute("DELETE FROM blog WHERE id = ?",(id,) ) # TUPLE KE ANDAR , LAGAANA PADTA HAI
-    conn.commit()
-    
-    return {
-        "message": "Blog Deleted successfully"
-    }
-
-
-# QUERY PARAMS 
-@app.delete("/delete-blog") # Removed /{id} from the path
-def delete_blog(id: int):   # This automatically becomes a Query Parameter
-    cursor.execute("DELETE FROM blog WHERE id = ?", (id,))
-    conn.commit()
-    
-    return {
-        "id_deleted": id,
-        "message": "Blog Deleted successfully using Query Parameter"
-    }
-
-
-@app.put("/update-blog")
-def create_blog(title: str = Body(...),  #Ellipsis ... it state that it is required 
-    completed: bool = Body(False),
-    creator: str = Body(...),
-    id: int = Body(...)
-    ):
-    cursor.execute(
-        "UPDATE blog SET title = ?, completed = ? WHERE id = ?", 
-        (title, int(completed), id)
-    )
-    conn.commit() 
-
-
-    return {
-        "id": id,
-        "title": title,
-        "crated By" :creator,
-        "completed": completed,
-        "message": "Blog Update successfully without Pydantic!"
-    }
-
-
-@app.patch("/patchupdate-blog")
-def update_blog(
-    id: int = Body(...),
-    title: str | None = Body(None),
-    completed: bool | None = Body(None),
-    creator: str | None = Body(None)
+@app.post(
+    "/products",
+    response_model=ProductResponse,
+    status_code=status.HTTP_201_CREATED
+)
+def create_product(
+    product_data: ProductCreate,
+    db: Session = Depends(get_db)
 ):
-    fields = []
-    values = []
+    product = Product(**product_data.model_dump())
 
-    if title is not None:
-        fields.append("title = ?")
-        values.append(title)
+    db.add(product)
+    db.commit()
+    db.refresh(product)
 
-    if completed is not None:
-        fields.append("completed = ?")
-        values.append(int(completed))
+    return product
 
-    # creator is currently not in your blog table,
-    # so don't update it in SQL.
 
-    if not fields:
-        return {
-            "message": "No fields provided for update"
-        }
+# ---------------- READ ALL ----------------
 
-    values.append(id)
+@app.get("/products", response_model=list[ProductResponse])
+def get_products(db: Session = Depends(get_db)):
+    statement = select(Product)
+    products = db.scalars(statement).all()
 
-    query = f"""
-        UPDATE blog
-        SET {", ".join(fields)}
-        WHERE id = ?
-    """
+    return products
 
-    cursor.execute(query, values)
-    conn.commit()
 
-    if cursor.rowcount == 0:
-        return {
-            "message": "Blog not found"
-        }
+# ---------------- READ ONE ----------------
 
-    return {
-        "id": id,
-        "message": "Blog updated successfully"
-    }
+@app.get("/products/{product_id}", response_model=ProductResponse)
+def get_product(product_id: int, db: Session = Depends(get_db)):
+    statement = select(Product).where(Product.id == product_id)
+    product = db.scalars(statement).one_or_none()
+
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found"
+        )
+
+    return product
+
+
+# ---------------- FULL UPDATE (PUT) ----------------
+
+@app.put("/products/{product_id}", response_model=ProductResponse)
+def update_product(
+    product_id: int,
+    product_data: ProductUpdate,
+    db: Session = Depends(get_db)
+):
+    product = db.get(Product, product_id)
+
+    if product is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found"
+        )
+
+    product.name = product_data.name
+    product.price = product_data.price
+    product.quantity = product_data.quantity
+
+    db.commit()
+    db.refresh(product)
+
+    return product
+
+
+# ---------------- PARTIAL UPDATE (PATCH) ----------------
+
+@app.patch("/products/{product_id}", response_model=ProductResponse)
+def patch_product(
+    product_id: int,
+    product_data: ProductPatch,
+    db: Session = Depends(get_db)
+):
+    product = db.get(Product, product_id)
+
+    if product is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found"
+        )
+
+    update_data = product_data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(product, field, value)
+
+    db.commit()
+    db.refresh(product)
+
+    return product
+
+
+# ---------------- DELETE ----------------
+
+@app.delete("/products/{product_id}")
+def delete_product(product_id: int, db: Session = Depends(get_db)):
+    product = db.get(Product, product_id)
+
+    if product is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found"
+        )
+
+    db.delete(product)
+    db.commit()
+
+    return {"message": "Product deleted successfully"}
