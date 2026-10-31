@@ -1,25 +1,45 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Read .env file
+from dotenv import load_dotenv
+
+# Access environment variables
+import os
+
 app = FastAPI()
 
-# Configure CORS middleware
+
+# STEP 1: Load .env file
+load_dotenv()
+
+
+# STEP 2: Read frontend URL from environment
+FRONTEND_URL = os.getenv("FRONTEND_URL")
+
+
+# STEP 3: Allowed origins
+origins = [
+    FRONTEND_URL
+]
+
+
+# STEP 4: Configure CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    # Frontend origins allowed to access this API
-    allow_origins=["http://localhost:3000"],
-    
-    # Allow cookies and authentication credentials
+
+    allow_origins=origins,
     allow_credentials=True,
-
-    # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
     allow_methods=["*"],
-
-    # Allow all request headers
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 
+# STEP 5: Home API
 @app.get("/")
 def home():
-    return {"message": "CORS enabled"}
+    return {
+        "message": "CORS ENABLE API",
+        "frontend": FRONTEND_URL
+    }
