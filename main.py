@@ -1,89 +1,79 @@
-#jwt 
 
-# header - payload - signature 
-
-
-#pip install python-josh
-
-
-
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
-from datetime import datetime, timedelta, timezone
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+import shutil
 
 app = FastAPI()
+UPLOAD_DIR = "uploads"
 
-SECRET_KEY = "mysecret"
-ALGORITHM = "HS256"
-security = HTTPBearer()
-
-
-# Create Token
-def create_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=30)
-    to_encode.update({
-        "exp": expire
-    })
-
-    token = jwt.encode(
-        to_encode,
-        SECRET_KEY,
-        algorithm=ALGORITHM
-    )
-
-    return token
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-# Login API (Token Generate)
-@app.post("/login")
-def login(username: str, password: str):
+app.mount(
+    "/files",
+    StaticFiles(directory=UPLOAD_DIR),
+    name="files"
+)
 
-    if username != "admin" or password != "admin1234":
+@app.post("/upload")
+def upload_file(file: UploadFile = File(...)):
+    filename = file.filename
+    if not filename:
         raise HTTPException(
-            status_code=401,
-            detail="Invalid Username and password"
+            status_code=400,
+            detail="File not selected"
+        )
+    filename = os.path.basename(filename)
+    if not filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename"
         )
 
-    token = create_token({
-        "sub": username
-    })
+    file_path = os.path.join(UPLOAD_DIR, filename)
 
-    return {
-        "access_token": token,
-        "token_type": "bearer"
-    }
-
-
-# Token Verify
-def verify_token(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
-
-    token = credentials.credentials
+    if os.path.exists(file_path):
+        raise HTTPException(
+            status_code=409,
+            detail="File already exists"
+        )
 
     try:
-        payload = jwt.decode(
-            token,
-            SECRET_KEY,
-            algorithms=[ALGORITHM]
-        )
 
-        return payload
+        with open(file_path, "xb") as buffer:
+            # copyfileobj() copies data from source to destination.
+            shutil.copyfileobj(file.file, buffer)
 
-    except JWTError:
+    except OSError:
         raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired Token"
+            status_code=500,
+            detail="File could not be uploaded"
         )
 
-
-# Protected Route
-@app.get("/secure")
-def secure_data(user=Depends(verify_token)):
+    finally:
+        file.file.close()
 
     return {
-        "message": "Secure Data Accessed",
-        "user": user
+        "message": "File uploaded successfully",
+        "fileName": filename,
+
+        "file_url": f"/files/{filename}"
+    }
+
+@app.get("/files/{filename}")
+def get_file(filename: str):
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
+
+
+@app.get("/")
+def home():
+
+    return {
+        "message": "File Upload API Running"
     }
