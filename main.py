@@ -1,79 +1,25 @@
-
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
-import shutil
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-UPLOAD_DIR = "uploads"
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-
-app.mount(
-    "/files",
-    StaticFiles(directory=UPLOAD_DIR),
-    name="files"
-)
-
-@app.post("/upload")
-def upload_file(file: UploadFile = File(...)):
-    filename = file.filename
-    if not filename:
-        raise HTTPException(
-            status_code=400,
-            detail="File not selected"
-        )
-    filename = os.path.basename(filename)
-    if not filename:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid filename"
-        )
-
-    file_path = os.path.join(UPLOAD_DIR, filename)
-
-    if os.path.exists(file_path):
-        raise HTTPException(
-            status_code=409,
-            detail="File already exists"
-        )
-
-    try:
-
-        with open(file_path, "xb") as buffer:
-            # copyfileobj() copies data from source to destination.
-            shutil.copyfileobj(file.file, buffer)
-
-    except OSError:
-        raise HTTPException(
-            status_code=500,
-            detail="File could not be uploaded"
-        )
-
-    finally:
-        file.file.close()
-
-    return {
-        "message": "File uploaded successfully",
-        "fileName": filename,
-
-        "file_url": f"/files/{filename}"
-    }
-
-@app.get("/files/{filename}")
-def get_file(filename: str):
-    file_path = os.path.join(UPLOAD_DIR, filename)
+# Configure CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    # Frontend origins allowed to access this API
+    allow_origins=["http://localhost:3000"],
     
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path)
+    # Allow cookies and authentication credentials
+    allow_credentials=True,
+
+    # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_methods=["*"],
+
+    # Allow all request headers
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
 def home():
-
-    return {
-        "message": "File Upload API Running"
-    }
+    return {"message": "CORS enabled"}
