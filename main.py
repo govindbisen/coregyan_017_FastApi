@@ -1,74 +1,53 @@
 
-# Import FastAPI to create our backend application
-# Import HTTPException to handle and return HTTP errors
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+import time
 
-# Import httpx to make asynchronous HTTP requests
-import httpx
-
-
-# Create FastAPI application instance
 app = FastAPI()
 
+# Cache dictionary
+cache = {}
 
-# =====================================================
-# Example 1: JSONPlaceholder - Get All Users
-# =====================================================
+# Cache valid for 10 seconds
+CACHE_TTL = 10
 
-# Define GET endpoint: http://127.0.0.1:8000/users
-@app.get("/users")
-async def get_users(page:int = 1):
 
-    try:
+# Dummy product data
+products = {
+    101: {"name": "Laptop", "price": 50000},
+    102: {"name": "Mobile", "price": 20000}
+}
 
-        # AsyncClient creates an HTTP client to communicate
-        # with an external API.
-        #
-        # async with automatically closes the client
-        # after the request is completed.
-        async with httpx.AsyncClient() as client:
 
-            # Send GET request to JSONPlaceholder API.
-            #
-            # await is used because the HTTP request is asynchronous.
-            # It allows the event loop to handle other tasks
-            # while waiting for the external API response.
-            response = await client.get(
-                "https://jsonplaceholder.typicode.com/users"
-            )
+@app.get("/products/{product_id}")
+def get_product(product_id: int):
 
-            # Check HTTP response status.
-            # If status is 4xx or 5xx, HTTPStatusError is raised.
-            response.raise_for_status()
+    # Step 1: Check whether product exists in cache
+    if product_id in cache:
 
-            # Convert JSON response into Python data
-            # (list or dictionary) and return it to the client.
+        cached_item = cache[product_id]
 
-            # pagination 
+        # Step 2: Check TTL (Time To Live)
+        if time.time() < cached_item["expiry"]:
 
-            limit = 3 
-            # page = 1
-            start =( page - 1 )*limit
-            end = start + limit 
-            return response.json()[start:end]
+            return {
+                "source": "CACHE",
+                "product": cached_item["data"]
+            }
 
-    # RequestError handles network-related errors,
-    # connection failures and timeout errors.
-    except httpx.RequestError:
+    # Step 3: Fetch fresh data
+    product = products.get(product_id)
 
-        # 502 means our server received a failure
-        # while communicating with the external API.
-        raise HTTPException(
-            status_code=502,
-            detail="External API connection failed"
-        )
+    if product is None:
+        return {"message": "Product not found"}
 
-    # HTTPStatusError occurs when external API
-    # returns an unsuccessful HTTP status (4xx or 5xx).
-    except httpx.HTTPStatusError:
+    # Step 4: Store data in cache
+    cache[product_id] = {
+        "data": product,
+        "expiry": time.time() + CACHE_TTL
+    }
 
-        raise HTTPException(
-            status_code=502,
-            detail="External API error"
-        )
-
+    # Step 5: Return fresh data
+    return {
+        "source": "DATABASE",
+        "product": product
+    }
